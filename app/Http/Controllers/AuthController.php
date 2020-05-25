@@ -9,7 +9,7 @@ use App\User as User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Hash;
-
+use Image;
 class AuthController extends Controller
 {
     /**
@@ -19,10 +19,12 @@ class AuthController extends Controller
      */
     public function __construct()
     {
-    	auth()->setDefaultDriver('api');
-        $this->middleware('auth:api', ['except' => ['login','registration','refresh']]);
+        auth()->setDefaultDriver('api');
+        $this->middleware('auth:api', ['except' => ['testing','login','registration','refresh']]);
     //   $this->middleware('cors');
     }
+
+
 
     /**
      * Get a JWT via given credentials.
@@ -32,12 +34,12 @@ class AuthController extends Controller
     public function login()
     {
         $credentials = request(['email', 'password']);
-// print_r($credentials); die;
         if (! $token = auth()->attempt($credentials)) {
-            return response()->json(['error' => 'Unauthorized'], 401);
+            return response()->json(['error' => 'Invalid Credentials'], 401);
         }
-
+        
         return $this->respondWithToken($token);
+
     }
 
     /**
@@ -47,7 +49,6 @@ class AuthController extends Controller
      */
     public function me()
     {
-      // echo 'ok'; die();
       try {
                 $user = auth()->userOrFail();
         } catch (\Tymon\JWTAuth\Exceptions\UserNotDefinedException $e) {
@@ -56,19 +57,11 @@ class AuthController extends Controller
             $error = $e->getMessage(); 
             return response()->json(['error' =>$e->getMessage()], 401);
         
-            }
-            
-        // header('Access-Control-Allow-Origin: *');
-        // header('Access-Control-Allow-Methods: *');
-        // header('Access-Control-Allow-Headers: *');
-        
-        // echo json_encode(auth()->user());
-    //    echo url('/');  
-    
+        }
       $userData = auth()->user();
       if(!is_null($userData->image_path)){
           
-          $userData->image_path =  url('/').'/images/profileimages/'.$userData->image_path;
+          $userData->image_path =  url('/').'/images/profileimages/full_image/'.$userData->image_path;
           
           $userData->image_path = str_replace('server.php','public',$userData->image_path );
       } 
@@ -119,17 +112,16 @@ class AuthController extends Controller
      */
     protected function respondWithToken($token)
     {
+        $user = Auth::user();
         return response()->json([
             'access_token' => $token,
             'token_type' => 'bearer',
-            'expires_in' => auth()->factory()->getTTL() * 6000
+            'expires_in' => auth()->factory()->getTTL() * 6000,
+            'user'=>$user
         ]);
     }
 
-
-	
-	  
-	public function registration(Request $request) 
+    public function registration(Request $request) 
     { 
         
         $validator = Validator::make($request->all(), [ 
@@ -139,39 +131,44 @@ class AuthController extends Controller
             'login_type' => 'required'
         ]);
         
-       	if ($validator->fails()) { 
-				return response()->json(['error'=>$validator->errors()], 401);            
-		}
-		
+        if ($validator->fails()) { 
+                return response()->json(['error'=>$validator->errors()], 401);            
+        }
+        
         $input = $request->all(); 
          
         if($input['login_type'] == 'web'){
             $user=$request->all();
-		  
-		  $validator = Validator::make($request->all(), [ 
-				'first_name' => 'required',
-				'last_name' => 'required',
-				'email' => 'required|email|unique:users',
-				'password' =>'required'
-				
-			   
-			]);
-			if ($validator->fails()) { 
-				return response()->json(['error'=>$validator->errors()], 401);            
-			}
-			$pw = $request->password;
-	        $status = 1;
-			$user =new User;
-			$user->name = $request->first_name;
-			$user->last_name = $request->last_name;
-			$user->email = $request->email;
-			$user->Password=Hash::make($pw);
-            $user->status=$status;
-			
-			$user->save();
-			 // echo $user->id;
+            
+          
+          $validator = Validator::make($request->all(), [ 
+                'first_name' => 'required',
+                'last_name' => 'required',
+                'email' => 'required|email|unique:users',
+                'password' =>'required'
+                
+               
+            ]);
+            if ($validator->fails()) { 
+                return response()->json(['error'=>$validator->errors()], 401);            
+            }
+            
+            $lastName=substr($user['last_name'], 0, 3);
+            $uniqueId=rand(100,1000);
+            $firstName=explode(" ",$user['first_name']);
+            $uniqueUserName=$lastName.$firstName[0].$uniqueId;
+            $pw = $request->password;
+    
+            $user =new User;
+            $user->name = $request->first_name;
+            $user->last_name = $request->last_name;
+            $user->email = $request->email;
+            $user->username=$uniqueUserName;
+            $user->Password=Hash::make($pw);
+            
+            $user->save();
 
-			return response()->json(['message'=>'Registration Successfully.'], 200);   
+            return response()->json(['message'=>'Registration Successfully.'], 200);   
         
         }else if($input['login_type'] == 'google'){
             
@@ -185,23 +182,25 @@ class AuthController extends Controller
                 return $this->respondWithToken($token);
                
             }else{
-                
+                $user=$request->all();
                 $pw = bcrypt('%s=adfh8sdf');
-	            $status = 1;
-		    	$user =new User;
-    			$user->name = $request->first_name;
-    			$user->last_name = $request->last_name;
-    			$user->email = $request->email;
-    			$user->Password=Hash::make($pw);
-    			$user->status=$status;
-    			$user->save();
+                $UserName=substr($user['last_name'], 0, 3);
+                $uniqueId=rand(100,1000);
+                $lastName=explode(" ",$user['first_name']);
+                $uniqueUserName=$UserName.$lastName[0].$uniqueId;
+    
+                $user =new User;
+                $user->name = $request->first_name;
+                $user->last_name = $request->last_name;
+                $user->email = $request->email;
+                $user->unique_user_name=$uniqueUserName;
+                $user->Password=Hash::make($pw);
+                
+                $user->save();
 
                 $token = auth()->tokenById($user->id);
                 return $this->respondWithToken($token);
             } 
         }
     }
-
-
-    
 }
